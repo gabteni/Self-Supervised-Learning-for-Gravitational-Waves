@@ -31,7 +31,7 @@ class GeM(nn.Module):
                 ', ' + 'eps=' + str(self.eps) + ')'
                 
 
-class CNN1d(nn.Module):
+"""class CNN1d(nn.Module):
     # inspired by https://www.kaggle.com/scaomath/g2net-1d-cnn-gem-pool-pytorch-train-inference
     def __init__(self):
         super().__init__()
@@ -107,15 +107,78 @@ class CNN1d(nn.Module):
         x = self.cnn7(x)
         x = x.flatten(start_dim=1)
         x = self.fc(x)
-        return x
+        return x"""
+class CNN1d(nn.Module):
+    def __init__(self):
+        super(DeepFeatureNet, self).__init__()
 
+        self.use_dropout = use_dropout
+        
+        # Convolutional layers with small filter size
+        self.conv1_stream1 = self._conv1d_layer(input_dims, 64, filter_size=50, stride=6)
+        self.pool1_stream1 = nn.MaxPool1d(kernel_size=8, stride=8)
+        self.conv2_stream1 = self._conv1d_layer(64, 128, filter_size=8, stride=1)
+        self.conv3_stream1 = self._conv1d_layer(128, 64, filter_size=8, stride=1)
+        self.conv4_stream1 = self._conv1d_layer(64, 32, filter_size=8, stride=1)
+        self.pool2_stream1 = nn.MaxPool1d(kernel_size=4, stride=4)
+
+        # Convolutional layers with large filter size
+        self.conv1_stream2 = self._conv1d_layer(input_dims, 64, filter_size=200, stride=25)
+        self.pool1_stream2 = nn.MaxPool1d(kernel_size=4, stride=4)
+        self.conv2_stream2 = self._conv1d_layer(64, 128, filter_size=6, stride=1)
+        self.conv3_stream2 = self._conv1d_layer(128, 64, filter_size=6, stride=1)
+        self.conv4_stream2 = self._conv1d_layer(64, 32, filter_size=6, stride=1)
+        self.pool2_stream2 = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.dropout=nn.Dropout(0.5)
+        # Final layers
+        self.fc_concat = nn.Linear(512, 256)
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, n_classes)
+    def _conv1d_layer(self, in_channels, out_channels, filter_size, stride):
+        return nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=filter_size, stride=stride),
+            nn.BatchNorm1d(out_channels),
+            nn.ReLU()
+        )
+        
+    def forward(self, x):
+        # Stream 1
+        out1_stream1 = self.conv1_stream1(x)
+        out1_stream1 = self.pool1_stream1(out1_stream1)
+        out1_stream1 = self.dropout(out1_stream1)#self._apply_dropout(out1_stream1)
+        out1_stream1 = self.conv2_stream1(out1_stream1)
+        out1_stream1 = self.conv3_stream1(out1_stream1)
+        out1_stream1 = self.conv4_stream1(out1_stream1)
+        out1_stream1 = self.pool2_stream1(out1_stream1)
+        # Stream 2
+        out1_stream2 = self.conv1_stream2(x)
+        out1_stream2 = self.pool1_stream2(out1_stream2)
+        out1_stream2 = self.dropout(out1_stream2)#self._apply_dropout(out1_stream2)
+        out1_stream2 = self.conv2_stream2(out1_stream2)
+        out1_stream2 = self.conv3_stream2(out1_stream2)
+        out1_stream2 = self.conv4_stream2(out1_stream2)
+        out1_stream2 = self.pool2_stream2(out1_stream2)
+
+        # Concatenate streams
+        concatenated = torch.cat((out1_stream1, out1_stream2), dim=2)
+        # Flatten
+        flattened = concatenated.view(concatenated.size(0), -1)
+        # Final fully connected layer
+        output = self.fc_concat(flattened)
+       # output=self._apply_dropout(output)
+        """output=self.dropout(output)
+        output=self.fc1(output)
+        output=self.dropout(output)
+        output=self.fc2(output)"""     
+        return output
+        
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
         self.cnn1 = CNN1d()
         self.cnn2 = CNN1d()
 
-        sizes = [2048] + [3192] * 3
+        sizes = [256] + [3192] * 3
         # projector
         layers = []
         for i in range(len(sizes) - 2):
